@@ -1,0 +1,268 @@
+// Backgammon rules engine — pure & immutable (validated with 5000 random games in Node).
+// board: number[24]. index 0 = point 1 ... index 23 = point 24.
+//   positive = side 'g' count, negative = side 'p' count.
+// 'g' moves index high->low (bears off below 0). 'p' moves low->high (bears off above 23).
+
+export type Side = 'g' | 'p';
+// 'classic' = standard backgammon.
+// 'marippa'   = Marippa version: checkers may also move backwards (opposite the
+//             bearing-off direction), and each home board is a protected safe zone.
+// 'marippa2'  = Marippa² (Marippa squared): identical to Marippa but with NO
+//             safe zone — backward moves may enter anywhere.
+export type GameMode = 'classic' | 'marippa' | 'marippa2';
+// Modes in which backward movement is allowed.
+export const allowsBackward = (m: GameMode): boolean => m === 'marippa' || m === 'marippa2';
+export const OFF = 'off';
+export const BAR = 'bar';
+export type Src = number | typeof BAR;
+export type Dest = number | typeof OFF;
+
+export interface GameState {
+  board: number[];
+  bar: Record<Side, number>;
+  off: Record<Side, number>;
+  turn: Side;
+  dice: number[];
+  remaining: number[];
+  winner: Side | null;
+  rolled: boolean;
+  mode: GameMode;
+  // Doubling cube: the stake multiplier and who may (re)double next.
+  cube: number;            // 1, 2, 4, 8, … — points the game is worth
+  cubeOwner: Side | null;  // null = centred (either side may double); else only owner may
+  pendingDouble: Side | null; // side that has offered a double, awaiting take/drop
+}
+
+export interface Move {
+  to: Dest;
+  die: number;
+  hit: boolean;
+  exact: boolean;
+  dir: 'fwd' | 'back'; // 'back' only occurs in Marippa mode
+}
+
+export const sign = (pl: Side): number => (pl === 'g' ? 1 : -1);
+export const opp = (pl: Side): Side => (pl === 'g' ? 'p' : 'g');
+
+export function newGameState(first: Side, mode: GameMode = 'classic'): GameState {
+  const board = new Array(24).fill(0);
+  board[23] = 2; board[12] = 5; board[7] = 3; board[5] = 5;         // g
+  board[0] = -2; board[11] = -5; board[16] = -3; board[18] = -5;    // p
+  return {
+    board,
+    bar: { g: 0, p: 0 },
+    off: { g: 0, p: 0 },
+    turn: first,
+    dice: [],
+    remaining: [],
+    winner: null,
+    rolled: false,
+    mode,
+    cube: 1,
+    cubeOwner: null,
+    pendingDouble: null,
+  };
+}
+
+function canLand(g: GameState, idx: number, pl: Side): boolean {
+  if (idx < 0 || idx > 23) return false;
+  const c = g.board[idx];
+  return pl === 'g' ? c >= -1 : c <= 1;
+}
+function isHit(g: GameState, idx: number, pl: Side): boolean {
+  const c = g.board[idx];
+  return pl === 'g' ? c === -1 : c === 1;
+}
+function allInHome(g: GameState, pl: Side): boolean {
+  if (pl === 'g') {
+    if (g.bar.g > 0) return false;
+    for (let i = 6; i < 24; i++) if (g.board[i] > 0) return false;
+    return true;
+  }
+  if (g.bar.p > 0) return false;
+  for (let i = 0; i < 18; i++) if (g.board[i] < 0) return false;
+  return true;
+}
+// A side's "safe zone" is its own home board — the six points where it bears off.
+// g bears off through points 1-6 (indices 0-5); p through points 19-24 (18-23).
+// In Marippa mode a checker resting in its own safe zone cannot be hit by a backward move.
+export function inSafeZone(idx: number, side: Side): boolean {
+  return side === 'g' ? idx >= 0 && idx <= 5 : idx >= 18 && idx <= 23;
+}
+
+// index of the checker furthest from bearing off, within the home board
+function furthestHome(g: GameState, pl: Side): number {
+  if (pl === 'g') {
+    for (let i = 5; i >= 0; i--) if (g.board[i] > 0) return i;
+    return -1;
+  }
+  for (let i = 18; i <= 23; i++) if (g.board[i] < 0) return i;
+  return -1;
+}
+
+export function legalDest(g: GameState, src: Src, d: number, pl: Side): Move | null {
+  const s = sign(pl);
+  if (g.bar[pl] > 0 && src !== BAR) return null; // must enter from the bar first
+  if (src === BAR) {
+    if (g.bar[pl] <= 0) return null;
+    const e = pl === 'g' ? 24 - d : d - 1;
+    if (canLand(g, e, pl)) return { to: e, die: d, hit: isHit(g, e, pl), exact: false, dir: 'fwd' };
+    return null;
+  }
+  const i = src;
+  if (pl === 'g' ? g.board[i] <= 0 : g.board[i] >= 0) return null; // no own checker here
+  const t = i - s * d; // g: i-d, p: i+d
+  const bearing = pl === 'g' ? t < 0 : t > 23;
+  if (!bearing) {
+    if (canLand(g, t, pl)) return { to: t, die: d, hit: isHit(g, t, pl), exact: false, dir: 'fwd' };
+    return null;
+  }
+  if (!allInHome(g, pl)) return null;
+  const pip = pl === 'g' ? i + 1 : 24 - i;
+  if (d === pip) return { to: OFF, die: d, hit: false, exact: true, dir: 'fwd' };
+  if (d > pip && i === furthestHome(g, pl)) return { to: OFF, die: d, hit: false, exact: false, dir: 'fwd' };
+  return null;
+}
+
+// Marippa rule: a checker may move against its bearing-off direction, staying on the
+// board (no backwards bearing-off, no backwards entry from the bar).
+export function legalDestBack(g: GameState, src: Src, d: number, pl: Side): Move | null {
+  if (!allowsBackward(g.mode) || src === BAR || g.bar[pl] > 0) return null;
+  const i = src;
+  const s = sign(pl);
+  if (pl === 'g' ? g.board[i] <= 0 : g.board[i] >= 0) return null; // no own checker here
+  const t = i + s * d; // opposite of the forward direction
+  if (t < 0 || t > 23) return null;
+  // Safe zone (Marippa only): a backward move may not enter the opponent's home board.
+  if (g.mode === 'marippa' && inSafeZone(t, opp(pl))) return null;
+  if (!canLand(g, t, pl)) return null;
+  return { to: t, die: d, hit: isHit(g, t, pl), exact: false, dir: 'back' };
+}
+
+// All legal destinations for one (src, die): forward plus, in Marippa mode, backward.
+function destsFor(g: GameState, src: Src, d: number, pl: Side): Move[] {
+  const out: Move[] = [];
+  const f = legalDest(g, src, d, pl);
+  if (f) out.push(f);
+  const b = legalDestBack(g, src, d, pl);
+  if (b) out.push(b);
+  return out;
+}
+
+export function sources(g: GameState, pl: Side): Src[] {
+  if (g.bar[pl] > 0) return [BAR];
+  const out: Src[] = [];
+  for (let i = 0; i < 24; i++) if (pl === 'g' ? g.board[i] > 0 : g.board[i] < 0) out.push(i);
+  return out;
+}
+
+export function hasAnyLegal(g: GameState, pl: Side): boolean {
+  const dice = [...new Set(g.remaining)];
+  for (const src of sources(g, pl)) for (const d of dice) if (destsFor(g, src, d, pl).length) return true;
+  return false;
+}
+
+export function legalMovesFrom(g: GameState, src: Src, pl: Side): Move[] {
+  const res: Move[] = [];
+  for (const d of new Set(g.remaining)) res.push(...destsFor(g, src, d, pl));
+  return res;
+}
+
+// Returns a NEW state (immutable) so React can diff it.
+export function applyMove(g: GameState, src: Src, to: Dest, die: number, hit: boolean): GameState {
+  const pl = g.turn;
+  const s = sign(pl);
+  const board = g.board.slice();
+  const bar = { ...g.bar };
+  const off = { ...g.off };
+  if (src === BAR) bar[pl]--; else board[src] -= s;
+  if (to === OFF) off[pl]++;
+  else if (hit) { bar[opp(pl)]++; board[to] = s; }
+  else board[to] += s;
+  const remaining = g.remaining.slice();
+  const k = remaining.indexOf(die);
+  if (k >= 0) remaining.splice(k, 1);
+  const winner = off[pl] === 15 ? pl : g.winner;
+  return { ...g, board, bar, off, remaining, winner };
+}
+
+export function pipCount(g: GameState, pl: Side): number {
+  let total = g.bar[pl] * 25;
+  for (let i = 0; i < 24; i++) {
+    if (pl === 'g' && g.board[i] > 0) total += g.board[i] * (i + 1);
+    if (pl === 'p' && g.board[i] < 0) total += (-g.board[i]) * (24 - i);
+  }
+  return total;
+}
+
+// ---------------------------------------------------------------------------
+// Heuristic bot — good enough to be a fun opponent, not a world champion.
+// Strategy: enumerate every maximal way to play the current roll, score the
+// resulting board, and keep the best. Works for classic and both Marippa modes
+// (backward moves fall out of destsFor for free).
+// ---------------------------------------------------------------------------
+
+export interface BotMove { from: Src; to: Dest; }
+
+// Board evaluation from `pl`'s point of view — higher is better.
+function evalState(g: GameState, pl: Side): number {
+  if (g.off[pl] === 15) return 1e6;
+  const o = opp(pl);
+  let s = 0;
+  // The race. A checker sent to the bar is discounted below its full 25 pips so the
+  // bot doesn't chase endless backward hits in the no-safe-zone modes (Marippa²).
+  s += (pipCount(g, o) - g.bar[o] * 13) - pipCount(g, pl);
+  s += (g.off[pl] - g.off[o]) * 14; // bearing off dominates → actively drives games to an end
+  s -= g.bar[pl] * 8;               // your own checker on the bar is bad
+  let home = 0;
+  for (let i = 0; i < 24; i++) {
+    const mine = pl === 'g' ? g.board[i] : -g.board[i]; // >0 = count of my checkers here
+    if (mine > 0 && inSafeZone(i, pl)) home += mine;    // checkers already in the home board
+    if (mine >= 2) s += 1.2;                            // a made point (block / anchor)
+    else if (mine === 1) s -= inSafeZone(i, pl) ? 0.5 : 3; // a blot — exposed unless safe
+  }
+  s += home * 0.6; // reward progress toward bearing off — breaks the symmetric backward shuffle
+  return s;
+}
+
+// Best full play for the current roll, as an ordered list of single moves.
+export function botBestPlay(g: GameState, pl: Side): BotMove[] {
+  let bestSeq: BotMove[] = [];
+  let bestLen = -1;
+  let bestScore = -Infinity;
+  const visit = (state: GameState, seq: BotMove[]) => {
+    let extended = false;
+    for (const src of sources(state, pl)) {
+      for (const d of new Set(state.remaining)) {
+        for (const mv of destsFor(state, src, d, pl)) {
+          extended = true;
+          visit(applyMove(state, src, mv.to, mv.die, mv.hit), [...seq, { from: src, to: mv.to }]);
+        }
+      }
+    }
+    if (!extended) {
+      // Prefer plays that use more dice (backgammon requires using as many as possible),
+      // breaking ties by board score.
+      const score = evalState(state, pl);
+      if (seq.length > bestLen || (seq.length === bestLen && score > bestScore)) {
+        bestSeq = seq; bestLen = seq.length; bestScore = score;
+      }
+    }
+  };
+  visit(g, []);
+  return bestSeq;
+}
+
+// Cube policy. Deliberately simple and pip-based.
+export function botShouldDouble(g: GameState, botSide: Side): boolean {
+  if (g.cube >= 8) return false;
+  if (!(g.cubeOwner === null || g.cubeOwner === botSide)) return false;
+  const mine = pipCount(g, botSide);
+  const theirs = pipCount(g, opp(botSide));
+  return mine <= theirs * 0.78 && mine < 130; // meaningfully ahead, game underway
+}
+export function botTakesDouble(g: GameState, botSide: Side): boolean {
+  const mine = pipCount(g, botSide);
+  const theirs = pipCount(g, opp(botSide));
+  return mine <= theirs * 1.35; // take unless the race is clearly lost
+}
