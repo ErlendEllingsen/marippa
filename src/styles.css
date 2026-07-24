@@ -1,7 +1,7 @@
 /* Marippa — Backgammon Limited Edition. Scaled to ~125% of the original. */
 :root {
-  --cg: #39ff14;            /* Martin  */
-  --cp: #ff4da6;            /* Filippa    */
+  --cg: #f5b301;            /* Martin  */
+  --cp: #e63946;            /* Filippa    */
   --bg: #0b0e14; --panel: #141926; --line: #232b3d;
   --pt-a: #1c2230; --pt-b: #2a3244;
   --wood: #5a4632;
@@ -344,55 +344,58 @@ header { display: flex; align-items: center; justify-content: space-between; gap
 }
 .modetag { font-size: 15px; margin-left: 2px; }
 
-/* ---- Marippa lion strike (fires briefly when a checker is hit) ---- */
+/* ---- Marippa Pøffel strike (a Pøffel slams in with a ketchup splat on every hit) ---- */
 .strike {
   position: fixed; inset: 0; z-index: 60; pointer-events: none; overflow: hidden;
   animation: strikeFlash .9s ease-out forwards;
 }
 @keyframes strikeFlash {
-  0% { background: rgba(255, 60, 40, .28); }
-  40% { background: rgba(255, 60, 40, .10); }
+  0% { background: rgba(229, 57, 70, .26); }   /* ketchup-red wash */
+  40% { background: rgba(229, 57, 70, .09); }
   100% { background: transparent; }
 }
-.strike .claw {
-  position: absolute; top: -20%; left: 50%; width: 8%; height: 150%;
-  background: linear-gradient(180deg, transparent, #fff5, #fff, #ffd54a, #fff, #fff5, transparent);
-  border-radius: 50%;
-  filter: blur(1px) drop-shadow(0 0 10px #fff);
-  transform-origin: top center; transform: translateX(-50%) rotate(20deg) scaleY(0);
-  animation: clawSlash .55s cubic-bezier(.2, .8, .2, 1) forwards;
+/* dollops of ketchup flung out from the point of impact */
+.strike .splat {
+  position: absolute; top: 50%; left: 50%; width: 46px; height: 46px;
+  background: radial-gradient(circle at 38% 32%, #ff7a5f, #e5301f 68%, #b3160b);
+  border-radius: 46% 54% 57% 43% / 53% 44% 56% 47%;
+  filter: drop-shadow(0 2px 5px rgba(150, 20, 10, .5));
+  transform: translate(-50%, -50%) scale(0); opacity: 0;
+  animation: splatFly .7s cubic-bezier(.2, .8, .2, 1) forwards;
 }
-.strike .claw1 { left: 34%; animation-delay: 0s; }
-.strike .claw2 { left: 50%; height: 165%; animation-delay: .05s; }
-.strike .claw3 { left: 66%; animation-delay: .1s; }
-@keyframes clawSlash {
-  0% { transform: translateX(-50%) rotate(20deg) scaleY(0); opacity: 0; }
-  25% { opacity: 1; }
-  60% { transform: translateX(-50%) rotate(20deg) scaleY(1); opacity: 1; }
-  100% { transform: translateX(-50%) rotate(20deg) scaleY(1); opacity: 0; }
+.strike .splat1 { --dx: -168px; --dy: -84px; width: 44px; height: 44px; animation-delay: .02s; }
+.strike .splat2 { --dx: 158px;  --dy: -58px; width: 32px; height: 32px; animation-delay: .06s; }
+.strike .splat3 { --dx: -120px; --dy: 120px; width: 30px; height: 30px; animation-delay: .10s; }
+.strike .splat4 { --dx: 96px;   --dy: 138px; width: 40px; height: 40px; animation-delay: .08s; }
+@keyframes splatFly {
+  0%   { transform: translate(-50%, -50%) scale(0); opacity: 0; }
+  22%  { opacity: 1; }
+  70%  { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1.12); opacity: 1; }
+  100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1.12); opacity: 0; }
 }
-.strike .roar {
-  position: absolute; top: 50%; left: 50%; font-size: 128px; line-height: 1;
-  transform: translate(-50%, -50%) scale(0);
-  filter: drop-shadow(0 0 24px #ff8c3c);
-  animation: roarPop .9s cubic-bezier(.2, 1.4, .3, 1) forwards;
+/* the Pøffel drops in from above, bounces to a slam, then fades */
+.strike .poffel {
+  position: absolute; top: 50%; left: 50%; width: 200px; height: auto;
+  transform: translate(-50%, -50%) scale(0) rotate(-16deg);
+  filter: drop-shadow(0 8px 18px rgba(0, 0, 0, .45)) drop-shadow(0 0 16px #ffb347);
+  animation: poffelSlam .9s cubic-bezier(.2, 1.4, .3, 1) forwards;
 }
-@keyframes roarPop {
-  0% { transform: translate(-50%, -50%) scale(0) rotate(-18deg); opacity: 0; }
-  30% { transform: translate(-50%, -50%) scale(1.25) rotate(6deg); opacity: 1; }
-  55% { transform: translate(-50%, -50%) scale(1) rotate(-3deg); opacity: 1; }
-  100% { transform: translate(-50%, -50%) scale(1.15) rotate(0); opacity: 0; }
+@keyframes poffelSlam {
+  0%   { transform: translate(-50%, -145%) scale(.45) rotate(-24deg); opacity: 0; }
+  30%  { transform: translate(-50%, -50%) scale(1.22) rotate(7deg); opacity: 1; }
+  55%  { transform: translate(-50%, -50%) scale(1) rotate(-4deg); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(1.14) rotate(0); opacity: 0; }
 }
 /* Respect reduced motion, but still give the (brief, essential) feedback:
-   drop the fast claw slashing and just fade the lion in and out. */
+   drop the flung ketchup splats and just fade the Pøffel in and out. */
 @media (prefers-reduced-motion: reduce) {
-  .strike .claw { display: none; }
-  .strike .roar { animation: roarFade .9s ease-out forwards; }
+  .strike .splat { display: none; }
+  .strike .poffel { animation: poffelFade .9s ease-out forwards; }
   /* keep the sparkle readable but still: a steady glow + a static ✨, no motion */
   .checker.safe { animation: none; }
   .checker.safe::after { animation: none; opacity: .9; transform: none; }
 }
-@keyframes roarFade {
+@keyframes poffelFade {
   0% { opacity: 0; transform: translate(-50%, -50%) scale(.9); }
   25% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
   70% { opacity: 1; transform: translate(-50%, -50%) scale(1); }

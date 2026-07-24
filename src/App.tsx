@@ -7,6 +7,7 @@ import {
   reducer, loadInitial, persist, diceDisplay, canEnd, Scores,
 } from './state';
 import Board from './Board';
+import poffel from './poffel.svg';
 
 // The bot always plays Player 2 ('p').
 const BOT_SIDE: Side = 'p';
@@ -16,11 +17,11 @@ const DICE_GLYPH = ['', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
 // Per-mode display strings, shared by the header, score badge and settings.
 const MODE_LABEL: Record<GameMode, string> = {
   classic: 'Classic',
-  marippa: 'Marippa version 🦁',
-  marippa2: 'Marippa² 🦁²',
+  marippa: 'Marippa version 🧇',
+  marippa2: 'Marippa² 🧇²',
 };
-const MODE_SHORT: Record<GameMode, string> = { classic: 'Classic', marippa: 'Marippa 🦁', marippa2: 'Marippa² 🦁²' };
-const MODE_TAG: Record<GameMode, string> = { classic: '♟', marippa: '🦁', marippa2: '🦁²' };
+const MODE_SHORT: Record<GameMode, string> = { classic: 'Classic', marippa: 'Marippa 🧇', marippa2: 'Marippa² 🧇²' };
+const MODE_TAG: Record<GameMode, string> = { classic: '♟', marippa: '🧇', marippa2: '🧇²' };
 
 const rng = () => 1 + Math.floor(Math.random() * 6);
 
@@ -49,7 +50,7 @@ export default function App() {
   const cheatBuf = useRef('');    // rolling buffer for the secret sequence
   const g = st.game;
   const marippa = st.mode === 'marippa';         // safe-zone version only
-  const marippaFamily = st.mode !== 'classic'; // Marippa or Marippa² (backward moves + lion)
+  const marippaFamily = st.mode !== 'classic'; // Marippa or Marippa² (backward moves + Pøffel)
 
   // ---- turn ownership (bot vs human) & doubling-cube flags ----
   const botSide = st.bot;                                   // Side the computer plays, or null
@@ -62,7 +63,7 @@ export default function App() {
     humanTurn && !g.rolled && !g.pendingDouble && !g.winner &&
     (g.cubeOwner === null || g.cubeOwner === g.turn);
 
-  // Marippa flourish: when a checker is hit, flash a lion strike across the screen.
+  // Marippa flourish: when a checker is hit, flash a Pøffel strike across the screen.
   const prevStrike = useRef(st.strike);
   useEffect(() => {
     if (st.strike === prevStrike.current) return;
@@ -316,10 +317,11 @@ export default function App() {
 
       {strikeShow && (
         <div className="strike" key={st.strike} aria-hidden="true">
-          <div className="claw claw1" />
-          <div className="claw claw2" />
-          <div className="claw claw3" />
-          <div className="roar">🦁</div>
+          <span className="splat splat1" />
+          <span className="splat splat2" />
+          <span className="splat splat3" />
+          <span className="splat splat4" />
+          <img className="poffel" src={poffel} alt="" />
         </div>
       )}
 
@@ -414,9 +416,9 @@ function Settings({
         </div>
         <div className="modehint">
           {md === 'marippa'
-            ? 'Marippa version: checkers may also move backwards, each player’s home board is a safe zone the opponent can’t move backward into, and hitting a checker unleashes a lion strike.'
+            ? 'Marippa version: checkers may also move backwards, each player’s home board is a safe zone the opponent can’t move backward into, and hitting a checker unleashes a Pøffel strike.'
             : md === 'marippa2'
-            ? 'Marippa² (Marippa squared): like Marippa — backward moves and the lion strike — but with NO safe zone, so backward moves may enter anywhere.'
+            ? 'Marippa² (Marippa squared): like Marippa — backward moves and the Pøffel strike — but with NO safe zone, so backward moves may enter anywhere.'
             : 'Classic backgammon rules.'}
         </div>
         <div className="row">

@@ -28,7 +28,7 @@ export interface AppState {
   colors: Record<Side, string>;
   scores: Scores; // per-mode: scores[mode][side]
   mode: GameMode;
-  strike: number; // bumps on every hit — drives the Marippa lion strike animation
+  strike: number; // bumps on every hit — drives the Marippa Pøffel strike animation
   bot: Side | null; // side played by the computer, or null for two-player hot-seat
 }
 
@@ -50,7 +50,7 @@ export type Action =
   | { type: 'DROP' };   // opponent declines — offerer wins the current stake
 
 const DEFAULT_NAMES: Record<Side, string> = { g: 'Martin', p: 'Filippa' };
-const DEFAULT_COLORS: Record<Side, string> = { g: '#39ff14', p: '#ff4da6' };
+const DEFAULT_COLORS: Record<Side, string> = { g: '#f5b301', p: '#e63946' };
 
 // After a roll/move, auto-grab the bar checker if it must (and can) re-enter.
 function selectionFor(game: GameState): { selected: Src | null; highlights: Move[] } {
